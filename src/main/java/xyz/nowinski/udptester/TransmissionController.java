@@ -7,19 +7,26 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.text.html.Option;
 import java.time.LocalDateTime;
 import java.util.EventListener;
+import java.util.Optional;
+
+import static java.util.Objects.nonNull;
 
 @Slf4j
 public class TransmissionController {
+    private static final long CONNECTION_TIMEOUT = 1000L;
     @Getter @Setter
     int port;
     @Getter @Setter
     String serverAddress;
-    UDPConnector connector=null;
+    private UDPConnector connector=null;
 
     int pkgPerSecond;
     private ChangeListener eventListener;
+    @Getter
+    private PackageTracker packageTracker = new PackageTracker();
 
     boolean running=false;
 
@@ -34,6 +41,17 @@ public class TransmissionController {
         running=true;
         log.info("Connecting to {} {}", serverAddress, port);
         connector=new UDPConnector(port, serverAddress);
+        connector.addPackageListener(new PackageListener() {
+            @Override
+            public void packageSent(long timestamp) {
+                packageTracker.sentPackage(timestamp);
+            }
+
+            @Override
+            public void packageReceived(long sentTimestamp, long receivedTimesamp) {
+                packageTracker.respondedToPackage(sentTimestamp, receivedTimesamp);
+            }
+        });
         try {
             connector.startup();
         } catch (Exception e) {
@@ -54,10 +72,16 @@ public class TransmissionController {
     }
 
     public boolean isConnected() {
-        return running && (LocalDateTime.now().getSecond()/10)%2!=0;
+        return running && Optional.ofNullable(packageTracker.lastResponse()).map(t->System.currentTimeMillis()-t<CONNECTION_TIMEOUT).orElse(false);
     }
 
     public void addEventListener(ChangeListener l) {
         this.eventListener = l;
+    }
+
+    public void setPkgPerSec(Integer value) {
+        if(nonNull(connector)&& nonNull(value)) {
+            connector.setMessageDelay(1000/value);
+        }
     }
 }

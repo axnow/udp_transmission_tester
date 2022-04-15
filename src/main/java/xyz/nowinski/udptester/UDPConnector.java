@@ -5,12 +5,14 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.nio.charset.Charset;
+import java.util.Optional;
 
 @Slf4j
 public class UDPConnector {
@@ -19,6 +21,11 @@ public class UDPConnector {
 
     Channel channel;
     EventLoopGroup workGroup = new NioEventLoopGroup();
+
+    @Getter @Setter
+    long messageDelay = 1000L;
+    boolean running=false;
+    PackageListener listener=null;
 
     /**
      * Constructor
@@ -31,6 +38,10 @@ public class UDPConnector {
         this.host = host;
     }
 
+    public void addPackageListener(PackageListener l) {
+        this.listener = l;
+    }
+
     /**
      * Startup the client
      *
@@ -38,13 +49,14 @@ public class UDPConnector {
      * @throws Exception
      */
     public ChannelFuture startup() throws Exception {
+        running=true;
         try {
             Bootstrap b = new Bootstrap();
             b.group(workGroup);
             b.channel(NioDatagramChannel.class);
             b.handler(new ChannelInitializer<DatagramChannel>() {
                 protected void initChannel(DatagramChannel datagramChannel) throws Exception {
-                    datagramChannel.pipeline().addLast(new NettyHandler());
+                    datagramChannel.pipeline().addLast(new ResponseHandler());
                     setupSender(datagramChannel);
                 }
             });
@@ -55,56 +67,114 @@ public class UDPConnector {
         } finally {
         }
     }
-
     private void setupSender(DatagramChannel datagramChannel) {
-        ScheduledExecutorService se = new ScheduledThreadPoolExecutor(10);
-        se.scheduleAtFixedRate(() -> {
-            log.info("Sending datagram...");
-            datagramChannel.writeAndFlush(Unpooled.wrappedBuffer("Hello".getBytes()));
-        }, 1l, 1l, TimeUnit.SECONDS);
+        new Thread(new DatagramSender(datagramChannel)).start();
     }
+
 
     /**
      * Shutdown a client
      */
     public void shutdown() {
+        running=false;
         workGroup.shutdownGracefully();
+
     }
 
-    public void startServer() {
+//    public void startServer() {
+//
+//        try {
+//            // Create a client
+//            System.out.println("Creating new UDP Client");
+//
+//            UDPConnector client = new UDPConnector(port, host);
+//            ChannelFuture channelFuture = client.startup();
+//
+//            System.out.println("New Client is created");
+//
+//            // wait for 5 seconds
+//            Thread.sleep(5000);
+//            // check the connection is successful
+//            if (channelFuture.isSuccess()) {
+//                // send message to server
+//                channelFuture.channel().writeAndFlush(Unpooled.wrappedBuffer("Hello".getBytes()))
+//                        .addListener(new ChannelFutureListener() {
+//                            @Override
+//                            public void operationComplete(ChannelFuture future) throws Exception {
+//                                System.out.println(future.isSuccess() ? "Message sent to server : Hello" :
+//                                        "Message sending failed");
+//                            }
+//                        });
+//            }
+//            // timeout before closing client
+//            Thread.sleep(5000);
+//            // close the client
+//            client.shutdown();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            System.out.println("Try Starting Server First !!");
+//        } finally {
+//
+//        }
+//    }
 
-        try {
-            // Create a client
-            System.out.println("Creating new UDP Client");
+    private class ResponseHandler extends SimpleChannelInboundHandler<Object> {
 
-            UDPConnector client = new UDPConnector(port, host);
-            ChannelFuture channelFuture = client.startup();
+        @Override
+        public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+            super.channelReadComplete(ctx);
+        }
 
-            System.out.println("New Client is created");
 
-            // wait for 5 seconds
-            Thread.sleep(5000);
-            // check the connection is successful
-            if (channelFuture.isSuccess()) {
-                // send message to server
-                channelFuture.channel().writeAndFlush(Unpooled.wrappedBuffer("Hello".getBytes()))
-                        .addListener(new ChannelFutureListener() {
-                            @Override
-                            public void operationComplete(ChannelFuture future) throws Exception {
-                                System.out.println(future.isSuccess() ? "Message sent to server : Hello" :
-                                        "Message sending failed");
-                            }
-                        });
+
+        @Override
+        public void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+            DatagramPacket packet = (DatagramPacket) msg;
+            String message = packet.content().toString(Charset.defaultCharset());
+            try {
+                long sourceTimestamp = Long.parseLong(message);
+                Optional.ofNullable(listener).ifPresent(l->l.packageReceived(sourceTimestamp, System.currentTimeMillis()));
+            } catch (NumberFormatException nfe) {
+                log.warn("Failed to parse message as timestamp, message: {}", message);
             }
-            // timeout before closing client
-            Thread.sleep(5000);
-            // close the client
-            client.shutdown();
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.out.println("Try Starting Server First !!");
-        } finally {
+        }
 
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            super.channelActive(ctx);
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            log.warn("Got exception on transmission.", cause);
+        }
+    }
+
+
+    private class DatagramSender implements Runnable {
+        DatagramChannel channel;
+
+        public DatagramSender(DatagramChannel channel) {
+            this.channel = channel;
+        }
+
+        @Override
+        public void run() {
+            try {
+                while (running) {
+                    long timestamp = System.currentTimeMillis();
+                    String content = "" + timestamp;
+
+                    log.info("Sending datagram, content={}", content);
+                    channel.writeAndFlush(Unpooled.wrappedBuffer(content.getBytes()));
+                    Optional.ofNullable(listener).ifPresent(l->l.packageSent(timestamp));
+                    Thread.sleep(messageDelay);
+
+                }
+            } catch (InterruptedException e) {
+                log.warn("Unexpected interruption", e);
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }
