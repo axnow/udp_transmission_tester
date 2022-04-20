@@ -61,6 +61,7 @@ public class UdpTransmissionTester {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         //add plots:
         sentPlot = new PacketPlot();
+        sentPlot.setAutoscale(true);
         JPanel p = new JPanel(new BorderLayout());
         p.setBorder(new TitledBorder("Packages sent"));
         p.add(sentPlot);
@@ -69,12 +70,15 @@ public class UdpTransmissionTester {
         p = new JPanel(new BorderLayout());
         p.setBorder(new TitledBorder("Packages received"));
         receivedPlot = new PacketPlot();
+        receivedPlot.setAutoscale(true);
         p.add(receivedPlot);
         panel.add(p);
 
         p = new JPanel(new BorderLayout());
         p.setBorder(new TitledBorder("Response time"));
         delayPlot = new PacketPlot();
+        delayPlot.setYMax(100);
+        delayPlot.setAutoscale(true);
         p.add(delayPlot);
         panel.add(p);
 
@@ -148,10 +152,13 @@ public class UdpTransmissionTester {
 
     private void updatePlots() {
         long now = System.currentTimeMillis();
-        PlotData<Integer> sentData =
-                controller.getPackageTracker().getSentPackagePlot(now - 5 * 60 * 1000, now, 10);
-        sentPlot.setValues(sentData);
+        sentPlot.setValues(controller.getPackageTracker().getSentPackagePlot(now - 5 * 60 * 1000, now, 1));
         sentPlot.repaint();
+        receivedPlot.setValues(controller.getPackageTracker().getRespondedPackagePlots(now - 5 * 60 * 1000, now, 1));
+        receivedPlot.repaint();
+        delayPlot.setValues(controller.getPackageTracker().getResponseDelayPlot(now - 5 * 60 * 1000, now, 1));
+        delayPlot.repaint();
+
     }
 
     private void updateTransmissionText() {

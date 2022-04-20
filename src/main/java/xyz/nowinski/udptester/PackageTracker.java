@@ -99,7 +99,7 @@ public class PackageTracker {
     protected List<Long> buildBuckets(long from, long to, int bucketWidth) {
         ZonedDateTime startTime = new Date(from).toInstant().atZone(ZoneId.systemDefault());
         ZonedDateTime endTime = new Date(to).toInstant().atZone(ZoneId.systemDefault());
-        startTime = startTime.withSecond(startTime.getSecond() / bucketWidth);
+        startTime = startTime.withSecond(startTime.getSecond() / bucketWidth).withNano(0);
         List<Long> buckets = new ArrayList<>();
 
         ZonedDateTime currentTime = startTime;
