@@ -14,7 +14,7 @@ import static java.util.Objects.isNull;
 
 @Slf4j
 public class PackageTracker {
-    private TreeMap<Long, Package> packages = new TreeMap<>();
+    final private TreeMap<Long, Package> packages = new TreeMap<>();
 
 
     public void sentPackage(long timestamp) {
@@ -74,7 +74,7 @@ public class PackageTracker {
                 .filter(p -> Optional.ofNullable(filter).map(f -> f.test(p)).orElse(true))
                 .forEach(p -> values.compute(findBucket(buckets, p), (i, v) -> aggregator.apply(v, p)));
 
-        return new PlotData<T>(buckets, IntStream.range(0, buckets.size())
+        return new PlotData<>(buckets, IntStream.range(0, buckets.size())
                 .mapToObj(values::get)
                 .collect(Collectors.toList()));
 
@@ -113,7 +113,7 @@ public class PackageTracker {
     }
 
     Long lastResponse() {
-        Optional<Package> lastReplayed = packages.values().stream().filter(p -> p.isReplayed())
+        Optional<Package> lastReplayed = packages.values().stream().filter(Package::isReplayed)
                 .max(Comparator.comparing(Package::getSendTimestamp));
         return lastReplayed.map(Package::getSendTimestamp).orElse(null);
     }

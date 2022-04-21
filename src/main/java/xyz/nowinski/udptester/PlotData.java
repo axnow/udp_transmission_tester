@@ -2,7 +2,6 @@ package xyz.nowinski.udptester;
 
 import lombok.Value;
 
-import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -21,6 +20,6 @@ public class PlotData<T> {
 
     public double getMaxValue() {
         return values.stream().map(v -> v instanceof Number ? ((Number) v).doubleValue() : 0.0)
-                .max(Comparator.comparing(v -> v instanceof Number ? ((Number) v).doubleValue() : 0.0)).orElse(0.0);
+                .max(Comparator.comparing(v -> ((Number) v).doubleValue())).orElse(0.0);
     }
 }

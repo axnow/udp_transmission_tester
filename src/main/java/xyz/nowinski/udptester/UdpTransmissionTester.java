@@ -7,6 +7,7 @@ import javax.swing.border.BevelBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -22,7 +23,7 @@ public class UdpTransmissionTester {
     PacketPlot receivedPlot;
     PacketPlot delayPlot;
 
-    TransmissionController controller;
+    final TransmissionController controller;
     private JButton startButton;
     private JButton stopButton;
     private JLabel transmissionStatusLabel;
@@ -31,9 +32,10 @@ public class UdpTransmissionTester {
     private JTextArea statusArea;
     private boolean wasConnected = false;
     private JSpinner pkgPerSecSpinner;
+    private int timeRangeMinutes = 5;
+
 
     public static void main(String[] args) {
-        System.out.println("Hello World!");
         new UdpTransmissionTester(new TransmissionController()).buildAndDisplayGui();
     }
 
@@ -43,7 +45,7 @@ public class UdpTransmissionTester {
     }
 
     private void buildAndDisplayGui() {
-        JFrame frame = new JFrame("Test Frame");
+        JFrame frame = new JFrame("UDP transmission tester");
 
         buildContent(frame);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -51,7 +53,7 @@ public class UdpTransmissionTester {
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
         new ScheduledThreadPoolExecutor(5).scheduleAtFixedRate(() -> SwingUtilities.invokeLater(this::updateStatus),
-                2000, 500, TimeUnit.MILLISECONDS);
+                2000, 100, TimeUnit.MILLISECONDS);
     }
 
 
@@ -62,23 +64,26 @@ public class UdpTransmissionTester {
         //add plots:
         sentPlot = new PacketPlot();
         sentPlot.setAutoscale(true);
+        sentPlot.setPlotColor(Color.green);
         JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(new TitledBorder("Packages sent"));
+        p.setBorder(new TitledBorder("Packages sent [pkg/sec]"));
         p.add(sentPlot);
         panel.add(p);
 
         p = new JPanel(new BorderLayout());
-        p.setBorder(new TitledBorder("Packages received"));
+        p.setBorder(new TitledBorder("Packages received [pkg/sec]"));
         receivedPlot = new PacketPlot();
         receivedPlot.setAutoscale(true);
+        receivedPlot.setPlotColor(Color.blue);
         p.add(receivedPlot);
         panel.add(p);
 
         p = new JPanel(new BorderLayout());
-        p.setBorder(new TitledBorder("Response time"));
+        p.setBorder(new TitledBorder("Response delay [msec]"));
         delayPlot = new PacketPlot();
         delayPlot.setYMax(100);
         delayPlot.setAutoscale(true);
+        delayPlot.setPlotColor(Color.red);
         p.add(delayPlot);
         panel.add(p);
 
@@ -97,12 +102,16 @@ public class UdpTransmissionTester {
         configPanel.add(serverPortField);
         configPanel.add(new JLabel("Time range[min]:"));
 
-        configPanel.add(new JComboBox<>(new Integer[]{5, 10, 30, 60}));
+        JComboBox<Integer> rangeComboBox = new JComboBox<>(new Integer[]{5, 10, 30, 60});
+        Integer selectedObject = (Integer) rangeComboBox.getSelectedItem();
+        timeRangeMinutes = selectedObject!=null? selectedObject:5;
+        updateTimeRange(timeRangeMinutes);
+        rangeComboBox.addItemListener(itemEvent -> updateTimeRange((Integer) itemEvent.getItem()));
+        configPanel.add(rangeComboBox);
 
-        configPanel.add(new JLabel("Pkg/sec:"));
-
+        configPanel.add(new JLabel("Send pkg/s:"));
         pkgPerSecSpinner = new JSpinner(new SpinnerNumberModel(10, 1, 20, 1));
-        pkgPerSecSpinner.addChangeListener(e-> updateMessageFrequency());
+        pkgPerSecSpinner.addChangeListener(e -> updateMessageFrequency());
         configPanel.add(pkgPerSecSpinner);
 
         startButton = new JButton("Start");
@@ -151,13 +160,13 @@ public class UdpTransmissionTester {
     }
 
     private void updatePlots() {
-        long now = System.currentTimeMillis();
-        sentPlot.setValues(controller.getPackageTracker().getSentPackagePlot(now - 5 * 60 * 1000, now, 1));
-        sentPlot.repaint();
-        receivedPlot.setValues(controller.getPackageTracker().getRespondedPackagePlots(now - 5 * 60 * 1000, now, 1));
-        receivedPlot.repaint();
-        delayPlot.setValues(controller.getPackageTracker().getResponseDelayPlot(now - 5 * 60 * 1000, now, 1));
-        delayPlot.repaint();
+        long windowEnd = 1000 * (System.currentTimeMillis() / 1000);
+        long windowStart = windowEnd - timeRangeMinutes * 60 * 1000L;
+
+        sentPlot.setValues(controller.getPackageTracker().getSentPackagePlot(windowStart, windowEnd, 1));
+        receivedPlot.setValues(controller.getPackageTracker().getRespondedPackagePlots(windowStart, windowEnd, 1));
+        delayPlot.setValues(controller.getPackageTracker().getResponseDelayPlot(windowStart, windowEnd, 1));
+        allPlots().forEach(PacketPlot::repaint);
 
     }
 
@@ -207,6 +216,25 @@ public class UdpTransmissionTester {
         controller.setPort(Integer.parseInt(serverPortField.getText().trim()));
         controller.start();
         updateMessageFrequency();
+    }
+
+    private void updateTimeRange(int newMinuteRange) {
+        timeRangeMinutes = newMinuteRange;
+        int tickMinutes;
+        if (newMinuteRange <= 5) {
+            tickMinutes = 1;
+        } else if (newMinuteRange <= 30) {
+            tickMinutes = 5;
+        } else if (newMinuteRange <= 60) {
+            tickMinutes = 10;
+        } else {
+            tickMinutes = 30;
+        }
+        allPlots().forEach(p -> p.setDescriptionTickMinutes(tickMinutes));
+    }
+
+    protected java.util.List<PacketPlot> allPlots() {
+        return Arrays.asList(sentPlot, receivedPlot, delayPlot);
     }
 
 

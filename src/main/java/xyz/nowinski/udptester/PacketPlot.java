@@ -10,13 +10,17 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
 
 import static java.util.Objects.nonNull;
 
 
 @Slf4j
 public class PacketPlot extends JPanel {
-    double yMin = 0.0;
+    final double yMin = 0.0;
     @Getter
     @Setter
     double yMax = 20;
@@ -25,13 +29,19 @@ public class PacketPlot extends JPanel {
     @Getter
     boolean autoscale = false;
 
-    int marginLeft = 60;
-    int marginBottom = 30;
+    final int marginLeft = 60;
+    final int marginBottom = 30;
+
+    @Setter
+    @Getter
+    int descriptionTickMinutes = 1;
+
 
     @Setter
     PlotData<? extends Number> values;
-    @Getter @Setter
-    private Color plotColor=Color.blue;
+    @Getter
+    @Setter
+    private Color plotColor = Color.blue;
 
     public PacketPlot() {
         super();
@@ -42,7 +52,7 @@ public class PacketPlot extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        log.info("Plotting paint");
+
         if (autoscale && nonNull(values)) {
             performAutoscale();
         }
@@ -52,10 +62,10 @@ public class PacketPlot extends JPanel {
             return;
         }
         Graphics2D g2 = (Graphics2D) g;
-        g2.setPaint(getBackground());
-        g2.fill(new Rectangle(0, 0, getWidth(), getHeight()));
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
         paintBox(g2);
-        paintTicks(g2);
         paintPlot(g2);
         paintAxes(g2);
     }
@@ -66,7 +76,6 @@ public class PacketPlot extends JPanel {
             yMax = 1.0;
         } else {
             double base = Math.pow(10.0, Math.floor(Math.log10(vMax)));
-
             for (double i : new double[]{1.0, 2.0, 5.0, 10.0}) {
                 yMax = i * base;
                 if (yMax > vMax) {
@@ -74,21 +83,14 @@ public class PacketPlot extends JPanel {
                 }
             }
         }
-        log.info("Autoscale performed, value={} ymax={}", vMax, yMax);
     }
 
     private void paintPlot(Graphics2D g2) {
-        log.info("Plotting paint");
-//        AffineTransform.
-//        g2.setClip(new Rectangle2D.Double(marginLeft, 0, getWindowWidth(), getWindowHeight()));
         AffineTransform plotTranform = AffineTransform.getScaleInstance(
                 getWindowWidth() / (double) (values.getMaxX() - values.getMinX()),
-                -1.0 * getWindowHeight() / (double) (yMax - yMin));
+                -1.0 * getWindowHeight() / (yMax - yMin));
         plotTranform.concatenate(AffineTransform.getTranslateInstance(-values.getMinX(), 0));
         plotTranform.preConcatenate(AffineTransform.getTranslateInstance(marginLeft, getWindowHeight()));
-
-//        plotTranform.preConcatenate(AffineTransform.getTranslateInstance(marginLeft, getWindowHeight()));
-//        g2.setTransform(plotTranform);
         Path2D p = new Path2D.Double();
         boolean draw = false;
         for (int i = 0; i < values.getPoints().size(); i++) {
@@ -108,7 +110,7 @@ public class PacketPlot extends JPanel {
                 draw = false;
             }
         }
-        g2.setStroke(new BasicStroke(2));
+        g2.setStroke(new BasicStroke(1.0f));
         g2.setPaint(plotColor);
         g2.draw(p);
     }
@@ -121,31 +123,54 @@ public class PacketPlot extends JPanel {
         return getWidth() - marginLeft;
     }
 
-    private void paintTicks(Graphics2D g2) {
-        //do nothing...
-    }
 
     private void paintBox(Graphics2D g2) {
         Rectangle2D.Double shape = new Rectangle2D.Double(marginLeft, 0, getWindowWidth(), getWindowHeight());
         g2.setColor(Color.white);
         g2.fill(shape);
-        g2.setPaint(Color.BLACK);
-        g2.setStroke(new BasicStroke(1));
+        g2.setPaint(Color.darkGray);
+        g2.setStroke(new BasicStroke(1.0f));
         g2.draw(shape);
     }
 
     private void paintAxes(Graphics2D g2) {
-        log.info("Plotting axes");
         g2.setColor(Color.black);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g2.setClip(0,0,getWidth(), getHeight());
+        g2.setClip(0, 0, getWidth(), getHeight());
         //vertical axis:
         Font font = getFont();
         g2.setFont(font);
-        int fh = getFontMetrics(font).getHeight();
-        g2.drawString(""+yMax, 0, fh);
-        g2.drawString(""+yMax/2, 0, (getWindowHeight()+fh)/2);
-
+        FontMetrics fontMetrics = getFontMetrics(font);
+        int fh = fontMetrics.getHeight();
+        g2.drawString("" + yMax, 0, fh);
+        g2.drawString("" + yMax / 2, 0, (getWindowHeight() + fh) / 2);
         g2.drawString("0", 0, getWindowHeight());
+        //horizontal axis:
+        if (values == null) {
+            return;
+        }
+        Long minTimestamp = values.getMinX();
+        ZonedDateTime startTime = new Date(minTimestamp).toInstant().atZone(ZoneId.systemDefault());
+        Long maxTimestamp = values.getMaxX();
+        ZonedDateTime endTime = new Date(maxTimestamp).toInstant().atZone(ZoneId.systemDefault());
+        ZonedDateTime time =
+                startTime.withSecond(0).withNano(0).withMinute(startTime.getMinute() / descriptionTickMinutes);
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+        while (time.isBefore(endTime)) {
+            if (time.isAfter(startTime)) {
+                //draw description...
+                String text = timeFormatter.format(time);
+                long ts = time.toInstant().toEpochMilli();
+                int tickPosition =
+                        (int) (getWindowWidth() * (ts - minTimestamp) / (double) (maxTimestamp - minTimestamp));
+                int descPosition = tickPosition + marginLeft - fontMetrics.stringWidth(text) / 2;
+                g2.setPaint(Color.black);
+                g2.drawString(text, descPosition, getWindowHeight() + fh);
+                //draw tick:
+                g2.setPaint(Color.lightGray);
+                g2.setStroke(new BasicStroke(0.5f));
+                g2.drawLine(tickPosition+marginLeft, 0, tickPosition+marginLeft, getWindowHeight());
+            }
+            time = time.plusMinutes(descriptionTickMinutes);
+        }
     }
 }

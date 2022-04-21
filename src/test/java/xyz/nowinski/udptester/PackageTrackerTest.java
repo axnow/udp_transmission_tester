@@ -45,14 +45,14 @@ public class PackageTrackerTest {
 // add some actual packages.
 
         instance.sentPackage(windowStart-10);
-        instance.sentPackage(windowStart+1*1000+150);
+        instance.sentPackage(windowStart+ 1000 +150);
         instance.sentPackage(windowStart+3*1000+150);
         instance.sentPackage(windowStart+3*1000+151);
         instance.sentPackage(windowStart+3*1000+152);
         instance.sentPackage(windowStart+3*1000+153);
         instance.sentPackage(windowStart+5*1000+150);
 
-        instance.respondedToPackage(windowStart+1*1000+150, windowStart+1*1000+450);
+        instance.respondedToPackage(windowStart+ 1000 +150, windowStart+ 1000 +450);
         instance.respondedToPackage(windowStart+3*1000+151, windowStart+3*1000+151+600);
         instance.respondedToPackage(windowStart+3*1000+153, windowStart+3*1000+153+602);
 
@@ -77,6 +77,6 @@ public class PackageTrackerTest {
         ZonedDateTime zt = ZonedDateTime.of(LocalDateTime.of(2020, 6, 1, 13, 30), ZoneId.of("UTC"));
         long roundMinute = zt.toInstant().toEpochMilli();
         List<Long> buckets = instance.buildBuckets(roundMinute, roundMinute + 30001, 1);
-        assertEquals(LongStream.range(0, 32).map(i->roundMinute+i*1000).mapToObj(i->i).collect(Collectors.toList()),buckets);
+        assertEquals(LongStream.range(0, 32).map(i->roundMinute+i*1000).boxed().collect(Collectors.toList()),buckets);
     }
 }

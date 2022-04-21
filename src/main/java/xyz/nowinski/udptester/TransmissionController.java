@@ -7,9 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import javax.swing.text.html.Option;
-import java.time.LocalDateTime;
-import java.util.EventListener;
 import java.util.Optional;
 
 import static java.util.Objects.nonNull;
@@ -26,7 +23,7 @@ public class TransmissionController {
     int pkgPerSecond;
     private ChangeListener eventListener;
     @Getter
-    private PackageTracker packageTracker = new PackageTracker();
+    private final PackageTracker packageTracker = new PackageTracker();
 
     boolean running=false;
 

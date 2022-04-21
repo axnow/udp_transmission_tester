@@ -1,6 +1,5 @@
 package xyz.nowinski.udptester;
 
-import lombok.Data;
 import lombok.Value;
 
 import java.time.ZoneId;
