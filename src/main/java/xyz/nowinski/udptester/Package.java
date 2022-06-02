@@ -37,4 +37,12 @@ public class Package {
     public boolean isReplayed() {
         return nonNull(responseTimestamp);
     }
+
+    @Override
+    public String toString() {
+        return "Package{" +
+                "sendTimestamp=" + sendTimestamp +
+                ", responseTimestamp=" + responseTimestamp + ", delay=" + getResponseDelay() +
+                '}';
+    }
 }
